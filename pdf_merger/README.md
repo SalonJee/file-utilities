@@ -22,17 +22,33 @@ sudo pacman -S poppler               # Arch
 
 ## Option 1 — Install Globally (Recommended)
 
-Install once, use from anywhere.
+Install once, use from anywhere. There are two ways to do this:
+
+### Method A: The Rust Way (Easiest)
 
 ```bash
 # 1. Go into the project folder
 cd /home/salon-timsina/Documents/projects/pdf_related_works/pdf_merger
 
-# 2. Install the binary globally
+# 2. Install the binary globally using Cargo
 cargo install --path .
 ```
+This automatically compiles and places the binary in `~/.cargo/bin/` (which is usually in your PATH).
 
-That's it. The binary is now available system-wide as `pdf_merger`.
+### Method B: Manual Copy to your local bin
+
+If you've already compiled the binary using `cargo build --release`, you can manually copy it to your user's bin folder:
+
+```bash
+# 1. Create the local bin folder if it doesn't exist
+mkdir -p ~/.local/bin
+
+# 2. Copy the binary over
+cp target/release/pdf_merger ~/.local/bin/
+```
+Make sure `~/.local/bin/` is in your system's PATH (it usually is on Linux).
+
+That's it! By doing either method, the binary is now available system-wide as `pdf_merger`.
 
 ### Usage
 
