@@ -1,2 +1,6 @@
 target/
 env/
+virenv/
+downloaded_songs.txt
+Single Songs/
+Single Videos/
