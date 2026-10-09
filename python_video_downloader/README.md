@@ -125,7 +125,7 @@ My Playlist Name/
 | **Audio download** | Best audio → MP3 at 192 kbps |
 | **Video download** | Best quality MP4 (prefix `/vdo`) |
 | **Playlist support** | ✅ Downloads all videos in a playlist |
-| **Duplicate skipping** | Tracks downloads in `downloaded_songs.txt` |
+| **Duplicate skipping** | Automatically checks folder and skips already downloaded files |
 | **Error handling** | Skips deleted/private videos automatically |
 
 ---
@@ -137,6 +137,7 @@ If you edit `main.py` and want to apply the changes:
 ```bash
 cp main.py ~/.local/bin/ytdl
 ```
+*(Or use a symlink `ln -s` so updates apply automatically!)*
 
 ---
 
@@ -145,5 +146,5 @@ cp main.py ~/.local/bin/ytdl
 1. Prompts for a YouTube URL (video or playlist)
 2. If prefixed with `/vdo`, downloads video as MP4; otherwise extracts audio as MP3
 3. Uses `yt-dlp` under the hood to handle downloading
-4. Saves a record of downloaded videos in `downloaded_songs.txt` to avoid re-downloading
+4. Checks existing files on disk to avoid re-downloading files that are already present
 5. Organizes files into folders named after the playlist (or `Single Songs` / `Single Videos` for individual URLs)
