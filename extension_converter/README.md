@@ -11,33 +11,30 @@ Supports image-to-image conversions natively, and uses standard system tools for
 | From → To | Method | External Tool Needed |
 |---|---|---|
 | **Image ↔ Image** (png, jpg, jpeg, webp, bmp, gif, tiff, ico) | Native (Rust `image` crate) | None |
-| **Image → PDF** | External | `img2pdf` or ImageMagick |
-| **PDF → Image** | External | `pdftoppm` (poppler-utils) |
-| **DOCX → PDF** | External | LibreOffice |
-| **PDF → DOCX** | External | LibreOffice |
-| **EPUB → PDF** | External | Calibre (`ebook-convert`) |
+| **Image → PDF** | External | `img2pdf` or ImageMagick (auto-installed) |
+| **PDF → Image** | External | `pdftoppm` (poppler-utils, auto-installed) |
+| **DOCX → PDF** | External | LibreOffice (auto-installed) |
+| **PDF → DOCX** | External | LibreOffice (auto-installed) |
+| **EPUB → PDF** | External | Calibre (`ebook-convert`, auto-installed) |
 
 ---
 
 ## Requirements
 
+The tool **auto-installs missing dependencies** on first use — you don't need to install anything beforehand.
+
+It checks for required system tools before each conversion and installs any that are missing (via `apt` or `pip`). This happens once per missing tool.
+
 ```bash
 # For image ↔ image: nothing extra needed!
 
-# For image → PDF (pick one):
-pip install img2pdf
-# or
-sudo apt install imagemagick
-
-# For PDF → image:
-sudo apt install poppler-utils
-
-# For DOCX ↔ PDF:
-sudo apt install libreoffice
-
-# For EPUB → PDF:
-sudo apt install calibre
+# For image → PDF: img2pdf (pip) or ImageMagick (apt) — auto-installed
+# For PDF → image: poppler-utils (apt) — auto-installed
+# For DOCX ↔ PDF: libreoffice (apt) — auto-installed
+# For EPUB → PDF: calibre (apt) — auto-installed
 ```
+
+> **Note:** Auto-install uses `sudo apt install -y` and `pip3 install --break-system-packages`. Make sure you have `sudo` access (passwordless sudo recommended for unattended installs).
 
 ---
 

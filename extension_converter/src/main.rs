@@ -26,8 +26,6 @@ fn main() {
         process::exit(1);
     }
 
-    // Check if the last argument is the target extension.
-    // If user passed "pdf", ".pdf", or even "out.pdf", extract the extension cleanly.
     let raw_last = args.last().unwrap();
     let new_ext = if let Some(ext) = Path::new(raw_last).extension().and_then(|e| e.to_str()) {
         ext.to_lowercase()
@@ -41,12 +39,13 @@ fn main() {
         let dir_path = Path::new(&dir_candidate_str);
         if dir_path.is_dir() {
             let old_ext = args[args.len() - 2].trim_start_matches('.').to_lowercase();
+            ensure_dependencies(&old_ext, &new_ext);
             batch_convert(dir_path, &old_ext, &new_ext);
             return;
         }
     }
 
-    // 2. Single File Mode: join all middle arguments to support spaces without quotes!
+    // 2. Single File Mode
     let file_candidate_str = args[1..args.len() - 1].join(" ");
     let file_path = Path::new(&file_candidate_str);
 
@@ -56,6 +55,14 @@ fn main() {
             eprintln!("Example: {} ./my_folder png jpg", args[0]);
             process::exit(1);
         }
+
+        let old_ext = file_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+
+        ensure_dependencies(&old_ext, &new_ext);
 
         println!("⏳ Converting {:?} → .{}...", file_path.file_name().unwrap(), new_ext);
         match convert_file(file_path, &new_ext) {
@@ -75,6 +82,66 @@ fn main() {
     }
 }
 
+fn ensure_dependencies(old_ext: &str, new_ext: &str) {
+    let old_is_image = is_image(old_ext);
+    let new_is_image = is_image(new_ext);
+
+    let needs_img2pdf = old_is_image && new_ext == "pdf";
+    let needs_pdftoppm = old_ext == "pdf" && new_is_image;
+    let needs_libreoffice = (old_ext == "docx" && new_ext == "pdf")
+        || (old_ext == "pdf" && new_ext == "docx");
+    let needs_ebook_convert = old_ext == "epub" && new_ext == "pdf";
+
+    if needs_img2pdf {
+        if !command_exists("img2pdf") && !command_exists("magick") && !command_exists("convert") {
+            println!("📦 'img2pdf' not found. Installing via pip...");
+            if run_install("pip3", &["install", "--break-system-packages", "img2pdf"]).is_err() {
+                if run_install("pip", &["install", "--break-system-packages", "img2pdf"]).is_err() {
+                    println!("⚠️  pip install img2pdf failed. Installing ImageMagick as fallback...");
+                    run_install("sudo", &["apt", "install", "-y", "imagemagick"]).ok();
+                }
+            }
+        }
+    }
+
+    if needs_pdftoppm && !command_exists("pdftoppm") {
+        println!("📦 'pdftoppm' not found. Installing poppler-utils...");
+        run_install("sudo", &["apt", "install", "-y", "poppler-utils"]).ok();
+    }
+
+    if needs_libreoffice && !command_exists("libreoffice") {
+        println!("📦 'libreoffice' not found. Installing...");
+        run_install("sudo", &["apt", "install", "-y", "libreoffice"]).ok();
+    }
+
+    if needs_ebook_convert && !command_exists("ebook-convert") {
+        println!("📦 'ebook-convert' not found. Installing calibre...");
+        run_install("sudo", &["apt", "install", "-y", "calibre"]).ok();
+    }
+}
+
+fn command_exists(cmd: &str) -> bool {
+    Command::new("sh")
+        .arg("-c")
+        .arg(format!("command -v {}", cmd))
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+fn run_install(cmd: &str, args: &[&str]) -> Result<(), String> {
+    match Command::new(cmd).args(args).output() {
+        Ok(out) if out.status.success() => Ok(()),
+        Ok(out) => Err(format!(
+            "Command '{} {:?}' failed: {}",
+            cmd,
+            args,
+            String::from_utf8_lossy(&out.stderr)
+        )),
+        Err(e) => Err(format!("Failed to run '{} {:?}': {}", cmd, args, e)),
+    }
+}
+
 // ─── Core conversion logic ──────────────────────────────────────────────────
 
 fn convert_file(input: &Path, new_ext: &str) -> Result<PathBuf, String> {
@@ -87,7 +154,6 @@ fn convert_file(input: &Path, new_ext: &str) -> Result<PathBuf, String> {
     let mut output = input.to_path_buf();
     output.set_extension(new_ext);
 
-    // Same extension — nothing to do
     if old_ext == new_ext || (old_ext == "jpg" && new_ext == "jpeg") || (old_ext == "jpeg" && new_ext == "jpg") {
         return Err(format!("Source and target are both .{}, skipping.", new_ext));
     }
@@ -96,7 +162,6 @@ fn convert_file(input: &Path, new_ext: &str) -> Result<PathBuf, String> {
     let new_is_image = is_image(new_ext);
 
     match (old_ext.as_str(), new_ext, old_is_image, new_is_image) {
-        // Image → Image (native, via `image` crate)
         (_, _, true, true) => {
             let img = image::open(input)
                 .map_err(|e| format!("Failed to open image: {}", e))?;
@@ -104,32 +169,26 @@ fn convert_file(input: &Path, new_ext: &str) -> Result<PathBuf, String> {
                 .map_err(|e| format!("Failed to save as .{}: {}", new_ext, e))?;
         }
 
-        // Image → PDF (external: img2pdf or ImageMagick)
         (_, "pdf", true, _) => {
             image_to_pdf(input, &output)?;
         }
 
-        // PDF → Image (external: pdftoppm)
         ("pdf", _, _, true) => {
             pdf_to_image(input, &output, new_ext)?;
         }
 
-        // DOCX → PDF (external: libreoffice)
         ("docx", "pdf", _, _) => {
             libreoffice_convert(input, "pdf")?;
         }
 
-        // PDF → DOCX (external: libreoffice)
         ("pdf", "docx", _, _) => {
             libreoffice_convert(input, "docx")?;
         }
 
-        // EPUB → PDF (external: calibre ebook-convert)
         ("epub", "pdf", _, _) => {
             ebook_convert(input, &output)?;
         }
 
-        // Unsupported
         _ => {
             return Err(format!(
                 "Conversion from .{} to .{} is not supported.",
@@ -148,7 +207,6 @@ fn is_image(ext: &str) -> bool {
 // ─── Image → PDF ────────────────────────────────────────────────────────────
 
 fn image_to_pdf(input: &Path, output: &Path) -> Result<(), String> {
-    // Try img2pdf first (fast, lossless for JPEG)
     if let Ok(out) = Command::new("img2pdf")
         .arg(input)
         .arg("-o")
@@ -160,7 +218,6 @@ fn image_to_pdf(input: &Path, output: &Path) -> Result<(), String> {
         }
     }
 
-    // Fall back to ImageMagick
     if let Ok(out) = Command::new("magick")
         .arg(input)
         .arg(output)
@@ -171,8 +228,18 @@ fn image_to_pdf(input: &Path, output: &Path) -> Result<(), String> {
         }
     }
 
+    if let Ok(out) = Command::new("convert")
+        .arg(input)
+        .arg(output)
+        .output()
+    {
+        if out.status.success() {
+            return Ok(());
+        }
+    }
+
     Err(
-        "Image → PDF requires 'img2pdf' (pip install img2pdf) or ImageMagick (sudo apt install imagemagick)."
+        "Image → PDF requires 'img2pdf' or ImageMagick (magick/convert). Dependencies should have been auto-installed."
             .into(),
     )
 }
@@ -207,7 +274,8 @@ fn pdf_to_image(input: &Path, output: &Path, format: &str) -> Result<(), String>
             String::from_utf8_lossy(&out.stderr)
         )),
         Err(_) => Err(
-            "PDF → Image requires 'pdftoppm' (sudo apt install poppler-utils).".into(),
+            "PDF → Image requires 'pdftoppm' (poppler-utils). Dependencies should have been auto-installed."
+                .into(),
         ),
     }
 }
@@ -233,7 +301,8 @@ fn libreoffice_convert(input: &Path, target_format: &str) -> Result<(), String> 
             String::from_utf8_lossy(&out.stderr)
         )),
         Err(_) => Err(
-            "DOCX ↔ PDF requires LibreOffice (sudo apt install libreoffice).".into(),
+            "DOCX ↔ PDF requires LibreOffice. Dependencies should have been auto-installed."
+                .into(),
         ),
     }
 }
@@ -253,7 +322,8 @@ fn ebook_convert(input: &Path, output: &Path) -> Result<(), String> {
             String::from_utf8_lossy(&out.stderr)
         )),
         Err(_) => Err(
-            "EPUB → PDF requires Calibre (sudo apt install calibre).".into(),
+            "EPUB → PDF requires Calibre (ebook-convert). Dependencies should have been auto-installed."
+                .into(),
         ),
     }
 }
